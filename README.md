@@ -1,45 +1,39 @@
-# Estoque de Pneus Online
+# PNEUACOESTOQUE — REPOSITÓRIO LIMPO
 
-Esta versão está preparada para funcionar online com PostgreSQL/Supabase.
+Mantenha SOMENTE estes arquivos no GitHub:
 
-## O que já faz
-- Login de usuários
-- Dashboard
-- Cadastro de novos pneus
-- Entrada de estoque
-- Saída/baixa de estoque
-- Ajuste de quantidade
-- Bloqueio de saída maior que o estoque
-- Histórico com usuário, NF, fornecedor/destino/motorista e observação
-- Relatórios e exportação para Excel
-- Base exclusiva PNEUS COM NOTA
-- Continua funcionando localmente com SQLite quando DATABASE_URL não está configurada
+- app.py
+- vendedores_app.py
+- requirements.txt
+- atualizar_base_online.py
+- README.md
 
-## Publicação recomendada
-1. Crie um banco PostgreSQL no Supabase.
-2. Copie a Connection String do banco.
-3. Defina uma variável/secreto chamada `DATABASE_URL`.
-4. Rode `migrar_para_postgres.py` uma única vez para carregar o estoque atual.
-5. Publique a pasta no Streamlit Community Cloud, Render ou Railway.
-6. Configure `DATABASE_URL` também no serviço onde o app será publicado.
+## App administrativo
+Main file path: `app.py`
+URL sugerida: `pneuacoestoque.streamlit.app`
+Exige login.
 
-## Login inicial
-Usuário: admin
-Senha: admin123
+## App público de vendedores
+Main file path: `vendedores_app.py`
+URL sugerida: `pneuacoestoque-vendedores.streamlit.app`
+NÃO exige login.
 
-Troque a senha após publicar.
+## Secrets nos dois apps
+Configure o mesmo secret no Streamlit:
 
-## Execução local
-Dê dois cliques em `INICIAR_APP.bat`.
+DATABASE_URL = "sua conexão do Supabase"
 
-## Estrutura
-- `app.py`: aplicativo
-- `estoque.db`: base local atual
-- `migrar_para_postgres.py`: envia a base atual para PostgreSQL
-- `.streamlit/secrets.toml.example`: exemplo da configuração do banco
+Não coloque a senha no GitHub.
 
+## Importante
+Apague do GitHub arquivos antigos como:
+- Consulta_Vendedores.py
+- Consulta_Vendedores.cpython-*.pyc
+- vendedores_app_CORRIGIDO.py
+- logo_pneuaco.png
+- estoque.db
+- migrar_para_postgres.py
+- .devcontainer
 
-## Correção desta versão
-Esta versão inclui migração automática do banco antigo.
-Se o arquivo `estoque.db` já existia, o sistema cria automaticamente as colunas:
-`usuario`, `nf`, `fornecedor_destino`, `estoque_anterior` e `estoque_atual`.
+A logo já está embutida em `vendedores_app.py`.
+O estoque online vem do Supabase.

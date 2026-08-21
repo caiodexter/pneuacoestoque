@@ -469,7 +469,6 @@ if not login():
     st.stop()
 
 st.sidebar.title("🛞 ESTOQUE DE PNEUS")
-st.sidebar.markdown("**Consulta pública vendedores:** abra `/Consulta_Vendedores` no mesmo domínio.")
 st.sidebar.caption(f"Usuário: {st.session_state.get('user','')}")
 pagina = st.sidebar.radio(
     "Menu",
