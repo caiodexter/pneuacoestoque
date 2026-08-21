@@ -1,0 +1,519 @@
+
+from pathlib import Path
+import io
+import os
+from datetime import datetime
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+
+BASE_DIR = Path(__file__).resolve().parent
+LOCAL_DB = BASE_DIR / "migrar_para_postgres.py"
+
+st.set_page_config(
+    page_title="Estoque de Pneus Online",
+    page_icon="🛞",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown("""
+<style>
+.stApp { background:#fff; }
+.block-container { padding-top:1.1rem; padding-bottom:2rem; }
+.hero {
+  background:linear-gradient(100deg,#031f45,#073a77);
+  color:white; padding:24px 28px; border-radius:14px; margin-bottom:16px;
+}
+.hero h1 { margin:0; font-size:34px; }
+.hero p { margin:7px 0 0; opacity:.9; font-size:15px; }
+.kpi {
+  border:1px solid #d7e0ec; border-radius:14px; padding:18px 20px;
+  background:white; min-height:120px;
+}
+.kpi .lbl { font-weight:700; font-size:13px; color:#111827; }
+.kpi .val { font-weight:800; font-size:26px; color:#061f43; margin-top:10px; }
+.section-title {
+  background:linear-gradient(100deg,#062b59,#073a77);
+  color:white; padding:10px 14px; border-radius:10px 10px 0 0;
+  font-weight:800; margin-top:8px;
+}
+.okbox {
+  background:#edf8f1; border:1px solid #b7e0c4; padding:12px 14px;
+  border-radius:10px; color:#155d2f; margin-bottom:12px;
+}
+.warnbox {
+  background:#fff7e6; border:1px solid #f2d59b; padding:12px 14px;
+  border-radius:10px; color:#7a5200; margin-bottom:12px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+def get_database_url():
+    # Priority: Streamlit secrets, then environment variable.
+    try:
+        if "DATABASE_URL" in st.secrets:
+            return st.secrets["DATABASE_URL"]
+    except Exception:
+        pass
+    return os.getenv("DATABASE_URL", "")
+
+@st.cache_resource
+def get_engine() -> Engine:
+    url = get_database_url().strip()
+    if url:
+        # Supabase and some providers still hand out postgres:// URLs.
+        if url.startswith("postgres://"):
+            url = "postgresql+psycopg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        return create_engine(url, pool_pre_ping=True, future=True)
+    return create_engine(f"sqlite:///{LOCAL_DB}", future=True)
+
+engine = get_engine()
+
+def is_online_db():
+    return str(engine.url).startswith("postgresql")
+
+def init_db():
+    dialect = engine.dialect.name
+    if dialect == "postgresql":
+        id_col = "BIGSERIAL PRIMARY KEY"
+        ts = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        bool_type = "BOOLEAN DEFAULT TRUE"
+    else:
+        id_col = "INTEGER PRIMARY KEY AUTOINCREMENT"
+        ts = "TEXT DEFAULT CURRENT_TIMESTAMP"
+        bool_type = "INTEGER DEFAULT 1"
+
+    with engine.begin() as conn:
+        conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS produtos (
+            id {id_col},
+            origem TEXT NOT NULL DEFAULT 'PNEUS COM NOTA',
+            descricao TEXT NOT NULL,
+            marca TEXT NOT NULL,
+            preco_unitario NUMERIC NOT NULL DEFAULT 0,
+            quantidade INTEGER NOT NULL DEFAULT 0,
+            ativo {bool_type},
+            criado_em {ts},
+            atualizado_em {ts}
+        )
+        """))
+
+        conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS movimentacoes (
+            id {id_col},
+            produto_id BIGINT NOT NULL,
+            tipo TEXT NOT NULL,
+            quantidade INTEGER NOT NULL,
+            usuario TEXT,
+            nf TEXT,
+            fornecedor_destino TEXT,
+            observacao TEXT,
+            estoque_anterior INTEGER,
+            estoque_atual INTEGER,
+            data_movimento {ts}
+        )
+        """))
+
+        conn.execute(text(f"""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id {id_col},
+            nome TEXT UNIQUE NOT NULL,
+            senha TEXT NOT NULL,
+            ativo {bool_type}
+        )
+        """))
+
+        # Migração automática para bancos criados por versões anteriores.
+        if dialect == "sqlite":
+            cols = {
+                row[1] for row in conn.execute(text("PRAGMA table_info(movimentacoes)")).fetchall()
+            }
+            alter_sql = {
+                "usuario": "ALTER TABLE movimentacoes ADD COLUMN usuario TEXT",
+                "nf": "ALTER TABLE movimentacoes ADD COLUMN nf TEXT",
+                "fornecedor_destino": "ALTER TABLE movimentacoes ADD COLUMN fornecedor_destino TEXT",
+                "estoque_anterior": "ALTER TABLE movimentacoes ADD COLUMN estoque_anterior INTEGER",
+                "estoque_atual": "ALTER TABLE movimentacoes ADD COLUMN estoque_atual INTEGER",
+            }
+            for col, sql in alter_sql.items():
+                if col not in cols:
+                    conn.execute(text(sql))
+
+            pcols = {
+                row[1] for row in conn.execute(text("PRAGMA table_info(produtos)")).fetchall()
+            }
+            if "atualizado_em" not in pcols:
+                conn.execute(text("ALTER TABLE produtos ADD COLUMN atualizado_em TEXT"))
+                conn.execute(text("UPDATE produtos SET atualizado_em=CURRENT_TIMESTAMP WHERE atualizado_em IS NULL"))
+            if "criado_em" not in pcols:
+                conn.execute(text("ALTER TABLE produtos ADD COLUMN criado_em TEXT"))
+                conn.execute(text("UPDATE produtos SET criado_em=CURRENT_TIMESTAMP WHERE criado_em IS NULL"))
+            if "ativo" not in pcols:
+                conn.execute(text("ALTER TABLE produtos ADD COLUMN ativo INTEGER DEFAULT 1"))
+                conn.execute(text("UPDATE produtos SET ativo=1 WHERE ativo IS NULL"))
+
+        else:
+            # PostgreSQL: ADD COLUMN IF NOT EXISTS makes upgrades safe.
+            for sql in [
+                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS usuario TEXT",
+                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS nf TEXT",
+                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS fornecedor_destino TEXT",
+                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS observacao TEXT",
+                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS estoque_anterior INTEGER",
+                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS estoque_atual INTEGER",
+                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS data_movimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE produtos ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE produtos ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                "ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE",
+            ]:
+                conn.execute(text(sql))
+
+        # Preenche estoque anterior/atual em movimentações antigas quando possível.
+        conn.execute(text("""
+            UPDATE movimentacoes
+            SET estoque_anterior = COALESCE(estoque_anterior, 0),
+                estoque_atual = COALESCE(estoque_atual, 0)
+        """))
+
+        # Cria usuário admin inicial somente se ainda não houver usuários.
+        count = conn.execute(text("SELECT COUNT(*) FROM usuarios")).scalar_one()
+        if count == 0:
+            conn.execute(
+                text("INSERT INTO usuarios(nome, senha, ativo) VALUES (:nome,:senha,:ativo)"),
+                {
+                    "nome": "admin",
+                    "senha": "admin123",
+                    "ativo": True if dialect == "postgresql" else 1,
+                },
+            )
+
+init_db()
+
+def seed_operational_users():
+    usuarios_padrao = [
+        ("gabriel", "0767"),
+        ("lucas", "1303"),
+        ("eduardo", "chefe"),
+    ]
+    with engine.begin() as conn:
+        for nome, senha in usuarios_padrao:
+            existe = conn.execute(
+                text("SELECT COUNT(*) FROM usuarios WHERE nome=:nome"),
+                {"nome": nome},
+            ).scalar_one()
+            if existe == 0:
+                conn.execute(
+                    text("INSERT INTO usuarios(nome,senha,ativo) VALUES (:nome,:senha,:ativo)"),
+                    {"nome": nome, "senha": senha, "ativo": True if engine.dialect.name=="postgresql" else 1},
+                )
+
+seed_operational_users()
+
+def load_products(active_only=True):
+    q = """
+        SELECT id, origem, descricao, marca, preco_unitario, quantidade,
+               preco_unitario * quantidade AS valor_estoque, ativo
+        FROM produtos
+    """
+    if active_only:
+        q += " WHERE ativo IN (1, TRUE)"
+    q += " ORDER BY descricao"
+    return pd.read_sql_query(text(q), engine)
+
+def brl(v):
+    s = f"{float(v or 0):,.2f}"
+    return "R$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+def detect_brand(desc):
+    u = str(desc).upper()
+    if "MICHELLIN" in u or "MICHELIN" in u:
+        return "MICHELIN"
+    if "MAXAN" in u or "MAXAM" in u or " MXA " in f" {u} ":
+        return "MAXAM"
+    if " CEAT " in f" {u} " or " CEA " in f" {u} ":
+        return "CEAT"
+
+    brands = [
+        "POWER ROAD","ROADGUIDER","FORERRUNER","FORERUNNER","PNEUAÇO","ATLAS",
+        "TRELLEBORG","GRIPMASTER","FIRESTONE","WESTLAKE","SPEEDMAX","ALLIANCE",
+        "MICHELIN","PIRELLI","ADVANCE","ASCENSO","DURABLE","GOODYEAR","VIKRANT",
+        "MAGGION","ARMOUR","APOLLO","CULTORE","KLEBER","MAXAM","OTRMAX","PETLAS",
+        "PRIMEX","TITAN","ANTEO","GALAXY","BKT","CEAT","MITAS","MRL","OZKA","SPM","ELITE"
+    ]
+    for b in sorted(brands, key=len, reverse=True):
+        if b in u:
+            return b
+    return "OUTRA/NAO IDENTIFICADA"
+
+def login():
+    if st.session_state.get("auth"):
+        return True
+    st.title("🔐 Acesso ao Estoque")
+    st.caption("Usuário inicial: admin | Senha inicial: admin123")
+    user = st.text_input("Usuário")
+    pwd = st.text_input("Senha", type="password")
+    if st.button("Entrar", type="primary"):
+        with engine.begin() as conn:
+            row = conn.execute(
+                text("SELECT nome FROM usuarios WHERE nome=:u AND senha=:p AND ativo IN (1, TRUE)"),
+                {"u":user, "p":pwd}
+            ).fetchone()
+        if row:
+            st.session_state["auth"] = True
+            st.session_state["user"] = user
+            st.rerun()
+        else:
+            st.error("Usuário ou senha inválidos.")
+    return False
+
+def dashboard():
+    df = load_products()
+    st.markdown("""
+    <div class="hero">
+      <h1>🛞 DASHBOARD — PNEUS COM NOTA</h1>
+      <p>Estoque online com entradas, saídas, cadastro e histórico de movimentações.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if is_online_db():
+        st.markdown('<div class="okbox">🟢 Banco online PostgreSQL conectado.</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="warnbox">🟡 Modo local: configure DATABASE_URL para usar PostgreSQL/Supabase online.</div>', unsafe_allow_html=True)
+
+    total_pneus = int(df["quantidade"].sum()) if not df.empty else 0
+    valor_total = float(df["valor_estoque"].sum()) if not df.empty else 0
+    marcas = int(df["marca"].nunique()) if not df.empty else 0
+    itens = len(df)
+
+    c1,c2,c3,c4 = st.columns(4)
+    for col, label, value, suffix in [
+        (c1,"TOTAL DE PNEUS",f"{total_pneus:,}".replace(",","."),"unidades"),
+        (c2,"VALOR TOTAL EM ESTOQUE",brl(valor_total),""),
+        (c3,"MARCAS",str(marcas),"marcas"),
+        (c4,"ITENS CADASTRADOS",str(itens),"itens"),
+    ]:
+        with col:
+            st.markdown(
+                f'<div class="kpi"><div class="lbl">{label}</div>'
+                f'<div class="val">{value}</div><div>{suffix}</div></div>',
+                unsafe_allow_html=True
+            )
+
+    st.markdown("### 🔎 Filtrar por marca")
+    marcas_lista = ["TODAS"] + sorted(df["marca"].dropna().unique().tolist()) if not df.empty else ["TODAS"]
+    marca = st.selectbox("Marca", marcas_lista, label_visibility="collapsed")
+
+    col_graf, col_tab = st.columns([0.9,1.1], gap="large")
+    with col_graf:
+        st.markdown('<div class="section-title">QUANTIDADE DE PNEUS POR MARCA (TOP 10)</div>', unsafe_allow_html=True)
+        if not df.empty:
+            top = (df.groupby("marca", as_index=False)["quantidade"].sum()
+                     .sort_values("quantidade", ascending=False).head(10)
+                     .sort_values("quantidade", ascending=True))
+            fig = px.bar(top, x="quantidade", y="marca", orientation="h",
+                         text="quantidade", labels={"marca":"","quantidade":"Quantidade"})
+            fig.update_layout(height=500, margin=dict(l=10,r=10,t=15,b=20),
+                              showlegend=False, plot_bgcolor="white", paper_bgcolor="white")
+            fig.update_traces(marker_color="#2f78d0", textposition="outside")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Nenhum produto cadastrado.")
+
+    with col_tab:
+        titulo = "TODAS AS MARCAS" if marca == "TODAS" else marca
+        st.markdown(
+            f'<div class="section-title">MODELOS DA MARCA SELECIONADA: {titulo}</div>',
+            unsafe_allow_html=True
+        )
+        filtro = df if marca == "TODAS" else df[df["marca"] == marca]
+        show = filtro[["descricao","quantidade","valor_estoque"]].copy() if not filtro.empty else pd.DataFrame(columns=["descricao","quantidade","valor_estoque"])
+        show.columns = ["MODELO / DESCRIÇÃO","QUANTIDADE","VALOR EM ESTOQUE"]
+        if not show.empty:
+            show["VALOR EM ESTOQUE"] = show["VALOR EM ESTOQUE"].map(brl)
+        st.dataframe(show, hide_index=True, use_container_width=True, height=500)
+        st.caption(f"Total de modelos encontrados: **{len(show)}**")
+
+def estoque():
+    st.title("📦 Estoque — PNEUS COM NOTA")
+    df = load_products()
+    q = st.text_input("Pesquisar por descrição ou marca")
+    if q and not df.empty:
+        mask = df["descricao"].str.contains(q, case=False, na=False) | df["marca"].str.contains(q, case=False, na=False)
+        df = df[mask]
+
+    st.dataframe(
+        df[["id","descricao","marca","preco_unitario","quantidade","valor_estoque"]],
+        hide_index=True, use_container_width=True, height=480,
+        column_config={
+            "id": st.column_config.NumberColumn("ID"),
+            "descricao":"Descrição","marca":"Marca",
+            "preco_unitario":st.column_config.NumberColumn("Preço Unitário", format="R$ %.2f"),
+            "quantidade":"Quantidade",
+            "valor_estoque":st.column_config.NumberColumn("Valor em Estoque", format="R$ %.2f"),
+        }
+    )
+
+    with st.expander("➕ Cadastrar novo pneu"):
+        with st.form("novo_produto"):
+            descricao = st.text_input("Descrição")
+            marca_digitada = st.text_input("Marca (opcional)").upper()
+            preco = st.number_input("Preço unitário", min_value=0.0, step=10.0)
+            qtd = st.number_input("Quantidade inicial", min_value=0, step=1)
+            nf = st.text_input("NF")
+            fornecedor = st.text_input("Fornecedor")
+            if st.form_submit_button("Salvar produto", type="primary"):
+                if not descricao.strip():
+                    st.error("Informe a descrição.")
+                else:
+                    marca = marca_digitada.strip() or detect_brand(descricao)
+                    with engine.begin() as conn:
+                        res = conn.execute(text("""
+                            INSERT INTO produtos(origem,descricao,marca,preco_unitario,quantidade,ativo)
+                            VALUES ('PNEUS COM NOTA',:d,:m,:p,:q,:a)
+                        """), {"d":descricao.strip(),"m":marca,"p":float(preco),"q":int(qtd),"a":True if is_online_db() else 1})
+                        # PostgreSQL can return id with RETURNING, SQLite via lastrowid is not portable here.
+                        pid = conn.execute(text("SELECT MAX(id) FROM produtos")).scalar_one()
+                        if qtd:
+                            conn.execute(text("""
+                                INSERT INTO movimentacoes
+                                (produto_id,tipo,quantidade,usuario,nf,fornecedor_destino,observacao,estoque_anterior,estoque_atual)
+                                VALUES (:pid,'ENTRADA',:q,:u,:nf,:fd,'Estoque inicial',0,:q)
+                            """), {"pid":pid,"q":int(qtd),"u":st.session_state["user"],"nf":nf,"fd":fornecedor})
+                    st.success("Produto cadastrado.")
+                    st.rerun()
+
+def movimentacoes():
+    st.title("🔄 Entrada / Saída de Estoque")
+    df = load_products()
+    if df.empty:
+        st.info("Cadastre um produto primeiro.")
+        return
+
+    labels = {f'{r.id} — {r.descricao} | Estoque: {r.quantidade}': int(r.id) for r in df.itertuples()}
+    escolhido = st.selectbox("Produto", list(labels.keys()))
+    tipo = st.radio("Tipo de movimentação", ["ENTRADA","SAIDA","AJUSTE"], horizontal=True)
+    qtd = st.number_input("Quantidade", min_value=0, step=1)
+
+    c1,c2 = st.columns(2)
+    with c1:
+        nf = st.text_input("NF")
+    with c2:
+        destino = st.text_input("Fornecedor / Destino / Motorista")
+    obs = st.text_input("Observação")
+
+    if st.button("Confirmar movimentação", type="primary"):
+        pid = labels[escolhido]
+        with engine.begin() as conn:
+            atual = conn.execute(text("SELECT quantidade FROM produtos WHERE id=:id"), {"id":pid}).scalar_one()
+
+            if tipo == "ENTRADA":
+                novo = atual + int(qtd)
+            elif tipo == "SAIDA":
+                if int(qtd) > atual:
+                    st.error(f"Saída maior que o estoque atual ({atual}).")
+                    st.stop()
+                novo = atual - int(qtd)
+            else:
+                novo = int(qtd)
+
+            conn.execute(text("""
+                UPDATE produtos SET quantidade=:novo, atualizado_em=CURRENT_TIMESTAMP WHERE id=:id
+            """), {"novo":novo,"id":pid})
+
+            conn.execute(text("""
+                INSERT INTO movimentacoes
+                (produto_id,tipo,quantidade,usuario,nf,fornecedor_destino,observacao,estoque_anterior,estoque_atual)
+                VALUES (:pid,:tipo,:q,:u,:nf,:fd,:obs,:ant,:novo)
+            """), {
+                "pid":pid,"tipo":tipo,"q":int(qtd),"u":st.session_state["user"],
+                "nf":nf,"fd":destino,"obs":obs,"ant":atual,"novo":novo
+            })
+        st.success(f"Movimentação registrada. Estoque: {atual} → {novo}")
+        st.rerun()
+
+    hist = pd.read_sql_query(text("""
+        SELECT m.id, m.data_movimento, m.usuario, p.descricao, p.marca,
+               m.tipo, m.quantidade, m.estoque_anterior, m.estoque_atual,
+               m.nf, m.fornecedor_destino, m.observacao
+        FROM movimentacoes m
+        JOIN produtos p ON p.id=m.produto_id
+        ORDER BY m.id DESC
+        LIMIT 500
+    """), engine)
+    st.subheader("Histórico de movimentações")
+    st.dataframe(hist, hide_index=True, use_container_width=True, height=430)
+
+def relatorios():
+    st.title("📊 Relatórios")
+    df = load_products()
+    marca = st.multiselect("Marca", sorted(df["marca"].dropna().unique()) if not df.empty else [])
+    f = df if not marca else df[df["marca"].isin(marca)]
+
+    resumo = (f.groupby("marca", as_index=False)
+               .agg(Modelos=("id","count"), Quantidade=("quantidade","sum"), Valor=("valor_estoque","sum"))
+               .sort_values("Quantidade", ascending=False)) if not f.empty else pd.DataFrame(columns=["marca","Modelos","Quantidade","Valor"])
+    st.dataframe(resumo, hide_index=True, use_container_width=True,
+                 column_config={"Valor":st.column_config.NumberColumn("Valor", format="R$ %.2f")})
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        f.to_excel(writer, index=False, sheet_name="PNEUS COM NOTA")
+        resumo.to_excel(writer, index=False, sheet_name="Resumo por Marca")
+    st.download_button(
+        "⬇️ Exportar relatório para Excel",
+        data=output.getvalue(),
+        file_name=f"pneus_com_nota_{datetime.now():%Y%m%d_%H%M}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+def usuarios():
+    st.title("👥 Usuários")
+    st.warning("Troque a senha do usuário admin assim que publicar o sistema online.")
+    with st.form("novo_usuario"):
+        nome = st.text_input("Novo usuário")
+        senha = st.text_input("Senha", type="password")
+        if st.form_submit_button("Criar usuário", type="primary"):
+            if not nome.strip() or not senha:
+                st.error("Informe usuário e senha.")
+            else:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text("INSERT INTO usuarios(nome,senha,ativo) VALUES (:n,:s,:a)"),
+                                     {"n":nome.strip(),"s":senha,"a":True if is_online_db() else 1})
+                    st.success("Usuário criado.")
+                except Exception as e:
+                    st.error(f"Não foi possível criar: {e}")
+
+    users = pd.read_sql_query(text("SELECT id,nome,ativo FROM usuarios ORDER BY nome"), engine)
+    st.dataframe(users, hide_index=True, use_container_width=True)
+
+if not login():
+    st.stop()
+
+st.sidebar.title("🛞 PNEUS COM NOTA")
+st.sidebar.caption(f"Usuário: {st.session_state.get('user','')}")
+pagina = st.sidebar.radio(
+    "Menu",
+    ["Dashboard","Estoque","Movimentações","Relatórios","Usuários"]
+)
+
+if st.sidebar.button("Sair"):
+    st.session_state.clear()
+    st.rerun()
+
+if pagina == "Dashboard":
+    dashboard()
+elif pagina == "Estoque":
+    estoque()
+elif pagina == "Movimentações":
+    movimentacoes()
+elif pagina == "Relatórios":
+    relatorios()
+else:
+    usuarios()
