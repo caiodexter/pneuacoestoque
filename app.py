@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 BASE_DIR = Path(__file__).resolve().parent
-LOCAL_DB = BASE_DIR / "migrar_para_postgres.py"
+LOCAL_DB = BASE_DIR / "estoque.db"
 
 st.set_page_config(
     page_title="Estoque de Pneus Online",
@@ -78,36 +78,54 @@ engine = get_engine()
 def is_online_db():
     return str(engine.url).startswith("postgresql")
 
+def ativo_sql():
+    # PostgreSQL uses BOOLEAN; SQLite uses 0/1 integers.
+    return "ativo IS TRUE" if engine.dialect.name == "postgresql" else "ativo=1"
+
 def init_db():
     dialect = engine.dialect.name
-    if dialect == "postgresql":
-        id_col = "BIGSERIAL PRIMARY KEY"
-        ts = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        bool_type = "BOOLEAN DEFAULT TRUE"
-    else:
-        id_col = "INTEGER PRIMARY KEY AUTOINCREMENT"
-        ts = "TEXT DEFAULT CURRENT_TIMESTAMP"
-        bool_type = "INTEGER DEFAULT 1"
 
+    if dialect == "postgresql":
+        # O banco online já foi criado por migrar_para_postgres.py.
+        # No Streamlit Cloud apenas validamos a existência das tabelas.
+        with engine.connect() as conn:
+            for tabela in ("produtos", "movimentacoes", "usuarios"):
+                existe = conn.execute(
+                    text("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM information_schema.tables
+                            WHERE table_schema='public' AND table_name=:tabela
+                        )
+                    """),
+                    {"tabela": tabela},
+                ).scalar_one()
+                if not existe:
+                    raise RuntimeError(
+                        f"Tabela '{tabela}' não encontrada no Supabase. "
+                        "Execute migrar_para_postgres.py antes de publicar."
+                    )
+        return
+
+    # Modo local SQLite.
     with engine.begin() as conn:
-        conn.execute(text(f"""
+        conn.execute(text("""
         CREATE TABLE IF NOT EXISTS produtos (
-            id {id_col},
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             origem TEXT NOT NULL DEFAULT 'PNEUS COM NOTA',
             descricao TEXT NOT NULL,
             marca TEXT NOT NULL,
             preco_unitario NUMERIC NOT NULL DEFAULT 0,
             quantidade INTEGER NOT NULL DEFAULT 0,
-            ativo {bool_type},
-            criado_em {ts},
-            atualizado_em {ts}
+            ativo INTEGER DEFAULT 1,
+            criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+            atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """))
-
-        conn.execute(text(f"""
+        conn.execute(text("""
         CREATE TABLE IF NOT EXISTS movimentacoes (
-            id {id_col},
-            produto_id BIGINT NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            produto_id INTEGER NOT NULL,
             tipo TEXT NOT NULL,
             quantidade INTEGER NOT NULL,
             usuario TEXT,
@@ -116,82 +134,33 @@ def init_db():
             observacao TEXT,
             estoque_anterior INTEGER,
             estoque_atual INTEGER,
-            data_movimento {ts}
+            data_movimento TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """))
-
-        conn.execute(text(f"""
+        conn.execute(text("""
         CREATE TABLE IF NOT EXISTS usuarios (
-            id {id_col},
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT UNIQUE NOT NULL,
             senha TEXT NOT NULL,
-            ativo {bool_type}
+            ativo INTEGER DEFAULT 1
         )
         """))
 
-        # Migração automática para bancos criados por versões anteriores.
-        if dialect == "sqlite":
-            cols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(movimentacoes)")).fetchall()
-            }
-            alter_sql = {
-                "usuario": "ALTER TABLE movimentacoes ADD COLUMN usuario TEXT",
-                "nf": "ALTER TABLE movimentacoes ADD COLUMN nf TEXT",
-                "fornecedor_destino": "ALTER TABLE movimentacoes ADD COLUMN fornecedor_destino TEXT",
-                "estoque_anterior": "ALTER TABLE movimentacoes ADD COLUMN estoque_anterior INTEGER",
-                "estoque_atual": "ALTER TABLE movimentacoes ADD COLUMN estoque_atual INTEGER",
-            }
-            for col, sql in alter_sql.items():
-                if col not in cols:
-                    conn.execute(text(sql))
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(movimentacoes)")).fetchall()}
+        extras = {
+            "usuario": "TEXT",
+            "nf": "TEXT",
+            "fornecedor_destino": "TEXT",
+            "estoque_anterior": "INTEGER",
+            "estoque_atual": "INTEGER",
+        }
+        for col, tipo in extras.items():
+            if col not in cols:
+                conn.execute(text(f"ALTER TABLE movimentacoes ADD COLUMN {col} {tipo}"))
 
-            pcols = {
-                row[1] for row in conn.execute(text("PRAGMA table_info(produtos)")).fetchall()
-            }
-            if "atualizado_em" not in pcols:
-                conn.execute(text("ALTER TABLE produtos ADD COLUMN atualizado_em TEXT"))
-                conn.execute(text("UPDATE produtos SET atualizado_em=CURRENT_TIMESTAMP WHERE atualizado_em IS NULL"))
-            if "criado_em" not in pcols:
-                conn.execute(text("ALTER TABLE produtos ADD COLUMN criado_em TEXT"))
-                conn.execute(text("UPDATE produtos SET criado_em=CURRENT_TIMESTAMP WHERE criado_em IS NULL"))
-            if "ativo" not in pcols:
-                conn.execute(text("ALTER TABLE produtos ADD COLUMN ativo INTEGER DEFAULT 1"))
-                conn.execute(text("UPDATE produtos SET ativo=1 WHERE ativo IS NULL"))
-
-        else:
-            # PostgreSQL: ADD COLUMN IF NOT EXISTS makes upgrades safe.
-            for sql in [
-                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS usuario TEXT",
-                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS nf TEXT",
-                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS fornecedor_destino TEXT",
-                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS observacao TEXT",
-                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS estoque_anterior INTEGER",
-                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS estoque_atual INTEGER",
-                "ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS data_movimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-                "ALTER TABLE produtos ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-                "ALTER TABLE produtos ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-                "ALTER TABLE produtos ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE",
-            ]:
-                conn.execute(text(sql))
-
-        # Preenche estoque anterior/atual em movimentações antigas quando possível.
-        conn.execute(text("""
-            UPDATE movimentacoes
-            SET estoque_anterior = COALESCE(estoque_anterior, 0),
-                estoque_atual = COALESCE(estoque_atual, 0)
-        """))
-
-        # Cria usuário admin inicial somente se ainda não houver usuários.
         count = conn.execute(text("SELECT COUNT(*) FROM usuarios")).scalar_one()
         if count == 0:
-            conn.execute(
-                text("INSERT INTO usuarios(nome, senha, ativo) VALUES (:nome,:senha,:ativo)"),
-                {
-                    "nome": "admin",
-                    "senha": "admin123",
-                    "ativo": True if dialect == "postgresql" else 1,
-                },
-            )
+            conn.execute(text("INSERT INTO usuarios(nome,senha,ativo) VALUES ('admin','admin123',1)"))
 
 init_db()
 
@@ -222,7 +191,7 @@ def load_products(active_only=True):
         FROM produtos
     """
     if active_only:
-        q += " WHERE ativo IN (1, TRUE)"
+        q += f" WHERE {ativo_sql()}"
     q += " ORDER BY descricao"
     return pd.read_sql_query(text(q), engine)
 
@@ -261,7 +230,7 @@ def login():
     if st.button("Entrar", type="primary"):
         with engine.begin() as conn:
             row = conn.execute(
-                text("SELECT nome FROM usuarios WHERE nome=:u AND senha=:p AND ativo IN (1, TRUE)"),
+                text(f"SELECT nome FROM usuarios WHERE nome=:u AND senha=:p AND {ativo_sql()}"),
                 {"u":user, "p":pwd}
             ).fetchone()
         if row:
