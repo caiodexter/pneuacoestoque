@@ -78,10 +78,6 @@ engine = get_engine()
 def is_online_db():
     return str(engine.url).startswith("postgresql")
 
-def ativo_sql():
-    # PostgreSQL uses BOOLEAN; SQLite uses 0/1 integers.
-    return "ativo IS TRUE" if engine.dialect.name == "postgresql" else "ativo=1"
-
 def init_db():
     dialect = engine.dialect.name
 
@@ -191,7 +187,7 @@ def load_products(active_only=True):
         FROM produtos
     """
     if active_only:
-        q += f" WHERE {ativo_sql()}"
+        q += " WHERE ativo = TRUE" if is_online_db() else " WHERE ativo = 1"
     q += " ORDER BY descricao"
     return pd.read_sql_query(text(q), engine)
 
@@ -230,7 +226,7 @@ def login():
     if st.button("Entrar", type="primary"):
         with engine.begin() as conn:
             row = conn.execute(
-                text(f"SELECT nome FROM usuarios WHERE nome=:u AND senha=:p AND {ativo_sql()}"),
+                text("SELECT nome FROM usuarios WHERE nome=:u AND senha=:p AND ativo = TRUE" if is_online_db() else "SELECT nome FROM usuarios WHERE nome=:u AND senha=:p AND ativo = 1"),
                 {"u":user, "p":pwd}
             ).fetchone()
         if row:
@@ -246,28 +242,27 @@ def dashboard():
     st.markdown("""
     <div class="hero">
       <h1>🛞 DASHBOARD — ESTOQUE DE PNEUS</h1>
-      <p>Base integrada com identificação de origem: PNEUS COM NOTA e DIESEL PNEUS.</p>
+      <p>Estoque online com entradas, saídas, cadastro e histórico de movimentações.</p>
     </div>
     """, unsafe_allow_html=True)
 
     if is_online_db():
-        st.markdown('<div class="okbox">🟢 Banco online PostgreSQL/Supabase conectado.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="okbox">🟢 Banco online PostgreSQL conectado.</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="warnbox">🟡 Modo local: configure DATABASE_URL para usar PostgreSQL/Supabase online.</div>', unsafe_allow_html=True)
 
     total_pneus = int(df["quantidade"].sum()) if not df.empty else 0
     valor_total = float(df["valor_estoque"].sum()) if not df.empty else 0
-    nota = df[df["origem"] == "PNEUS COM NOTA"]
-    diesel = df[df["origem"] == "DIESEL PNEUS"]
+    marcas = int(df["marca"].nunique()) if not df.empty else 0
+    itens = len(df)
 
     c1,c2,c3,c4 = st.columns(4)
-    cards = [
-        (c1, "TOTAL DE PNEUS", f"{total_pneus:,}".replace(",","."), "unidades"),
-        (c2, "VALOR TOTAL EM ESTOQUE", brl(valor_total), ""),
-        (c3, "PNEUS COM NOTA", f"{int(nota['quantidade'].sum()):,}".replace(",","."), f"{len(nota)} modelos"),
-        (c4, "DIESEL PNEUS", f"{int(diesel['quantidade'].sum()):,}".replace(",","."), f"{len(diesel)} modelos"),
-    ]
-    for col,label,value,suffix in cards:
+    for col, label, value, suffix in [
+        (c1,"TOTAL DE PNEUS",f"{total_pneus:,}".replace(",","."),"unidades"),
+        (c2,"VALOR TOTAL EM ESTOQUE",brl(valor_total),""),
+        (c3,"MARCAS",str(marcas),"marcas"),
+        (c4,"ITENS CADASTRADOS",str(itens),"itens"),
+    ]:
         with col:
             st.markdown(
                 f'<div class="kpi"><div class="lbl">{label}</div>'
@@ -275,23 +270,31 @@ def dashboard():
                 unsafe_allow_html=True
             )
 
-    f1,f2 = st.columns(2)
-    with f1:
-        origem = st.selectbox("Origem do estoque", ["TODAS","PNEUS COM NOTA","DIESEL PNEUS"])
-    base = df if origem == "TODAS" else df[df["origem"] == origem]
-    with f2:
-        marcas = ["TODAS"] + sorted(base["marca"].dropna().unique().tolist()) if not base.empty else ["TODAS"]
-        marca = st.selectbox("Marca", marcas)
+    com_nota = int(df.loc[df["origem"]=="PNEUS COM NOTA","quantidade"].sum()) if not df.empty else 0
+    sem_nota = int(df.loc[df["origem"]=="PNEUS SEM NOTA","quantidade"].sum()) if not df.empty else 0
+    diesel = int(df.loc[df["origem"]=="DIESEL PNEUS","quantidade"].sum()) if not df.empty else 0
 
-    filtro = base if marca == "TODAS" else base[base["marca"] == marca]
+    o1,o2,o3 = st.columns(3)
+    for col, label, value in [(o1,"PNEUS COM NOTA",com_nota),(o2,"PNEUS SEM NOTA",sem_nota),(o3,"DIESEL PNEUS",diesel)]:
+        with col:
+            st.markdown(f'<div class="kpi"><div class="lbl">{label}</div><div class="val">{value:,}</div><div>unidades</div></div>'.replace(",","."), unsafe_allow_html=True)
+
+    st.markdown("### 🔎 Filtrar estoque")
+    f1, f2 = st.columns(2)
+    with f1:
+        origem_sel = st.selectbox("Origem", ["TODAS","PNEUS COM NOTA","PNEUS SEM NOTA","DIESEL PNEUS"], key="dash_origem")
+    base_dash = df if origem_sel == "TODAS" else df[df["origem"] == origem_sel]
+    with f2:
+        marcas_lista = ["TODAS"] + sorted(base_dash["marca"].dropna().unique().tolist()) if not base_dash.empty else ["TODAS"]
+        marca = st.selectbox("Marca", marcas_lista, key="dash_marca")
 
     col_graf, col_tab = st.columns([0.9,1.1], gap="large")
     with col_graf:
-        st.markdown('<div class="section-title">QUANTIDADE POR MARCA (TOP 10)</div>', unsafe_allow_html=True)
-        if not filtro.empty:
-            top = (filtro.groupby("marca", as_index=False)["quantidade"].sum()
-                         .sort_values("quantidade", ascending=False).head(10)
-                         .sort_values("quantidade", ascending=True))
+        st.markdown('<div class="section-title">QUANTIDADE DE PNEUS POR MARCA (TOP 10)</div>', unsafe_allow_html=True)
+        if not base_dash.empty:
+            top = (base_dash.groupby("marca", as_index=False)["quantidade"].sum()
+                     .sort_values("quantidade", ascending=False).head(10)
+                     .sort_values("quantidade", ascending=True))
             fig = px.bar(top, x="quantidade", y="marca", orientation="h",
                          text="quantidade", labels={"marca":"","quantidade":"Quantidade"})
             fig.update_layout(height=500, margin=dict(l=10,r=10,t=15,b=20),
@@ -299,20 +302,28 @@ def dashboard():
             fig.update_traces(marker_color="#2f78d0", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Nenhum produto encontrado para o filtro.")
+            st.info("Nenhum produto cadastrado.")
 
     with col_tab:
-        st.markdown('<div class="section-title">MODELOS / ORIGEM DO ESTOQUE</div>', unsafe_allow_html=True)
-        show = filtro[["origem","descricao","marca","quantidade","valor_estoque"]].copy()
-        show.columns = ["ORIGEM","MODELO / DESCRIÇÃO","MARCA","QUANTIDADE","VALOR EM ESTOQUE"]
+        titulo = "TODAS AS MARCAS" if marca == "TODAS" else marca
+        st.markdown(
+            f'<div class="section-title">MODELOS DA MARCA SELECIONADA: {titulo}</div>',
+            unsafe_allow_html=True
+        )
+        filtro = base_dash if marca == "TODAS" else base_dash[base_dash["marca"] == marca]
+        show = filtro[["descricao","quantidade","valor_estoque"]].copy() if not filtro.empty else pd.DataFrame(columns=["descricao","quantidade","valor_estoque"])
+        show.columns = ["MODELO / DESCRIÇÃO","QUANTIDADE","VALOR EM ESTOQUE"]
         if not show.empty:
             show["VALOR EM ESTOQUE"] = show["VALOR EM ESTOQUE"].map(brl)
         st.dataframe(show, hide_index=True, use_container_width=True, height=500)
         st.caption(f"Total de modelos encontrados: **{len(show)}**")
 
 def estoque():
-    st.title("📦 Estoque — PNEUS COM NOTA + DIESEL PNEUS")
+    st.title("📦 Estoque — Todos os Pneus")
     df = load_products()
+    origem_estoque = st.selectbox("Origem", ["TODAS","PNEUS COM NOTA","PNEUS SEM NOTA","DIESEL PNEUS"], key="estoque_origem")
+    if origem_estoque != "TODAS" and not df.empty:
+        df = df[df["origem"] == origem_estoque]
     q = st.text_input("Pesquisar por descrição ou marca")
     if q and not df.empty:
         mask = df["descricao"].str.contains(q, case=False, na=False) | df["marca"].str.contains(q, case=False, na=False)
@@ -332,7 +343,7 @@ def estoque():
 
     with st.expander("➕ Cadastrar novo pneu"):
         with st.form("novo_produto"):
-            origem_nova = st.selectbox("Origem", ["PNEUS COM NOTA","DIESEL PNEUS"])
+            origem_novo = st.selectbox("Origem do pneu", ["PNEUS COM NOTA","PNEUS SEM NOTA","DIESEL PNEUS"])
             descricao = st.text_input("Descrição")
             marca_digitada = st.text_input("Marca (opcional)").upper()
             preco = st.number_input("Preço unitário", min_value=0.0, step=10.0)
@@ -348,7 +359,7 @@ def estoque():
                         res = conn.execute(text("""
                             INSERT INTO produtos(origem,descricao,marca,preco_unitario,quantidade,ativo)
                             VALUES (:origem,:d,:m,:p,:q,:a)
-                        """), {"origem":origem_nova,"d":descricao.strip(),"m":marca,"p":float(preco),"q":int(qtd),"a":True if is_online_db() else 1})
+                        """), {"origem":origem_novo,"d":descricao.strip(),"m":marca,"p":float(preco),"q":int(qtd),"a":True if is_online_db() else 1})
                         # PostgreSQL can return id with RETURNING, SQLite via lastrowid is not portable here.
                         pid = conn.execute(text("SELECT MAX(id) FROM produtos")).scalar_one()
                         if qtd:
@@ -435,12 +446,12 @@ def relatorios():
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        f.to_excel(writer, index=False, sheet_name="PNEUS COM NOTA")
+        f.to_excel(writer, index=False, sheet_name="ESTOQUE")
         resumo.to_excel(writer, index=False, sheet_name="Resumo por Marca")
     st.download_button(
         "⬇️ Exportar relatório para Excel",
         data=output.getvalue(),
-        file_name=f"pneus_com_nota_{datetime.now():%Y%m%d_%H%M}.xlsx",
+        file_name=f"estoque_pneus_{datetime.now():%Y%m%d_%H%M}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
@@ -468,7 +479,7 @@ def usuarios():
 if not login():
     st.stop()
 
-st.sidebar.title("🛞 ESTOQUE DE PNEUS")
+st.sidebar.title("🛞 PNEUAÇO ESTOQUE")
 st.sidebar.caption(f"Usuário: {st.session_state.get('user','')}")
 pagina = st.sidebar.radio(
     "Menu",
