@@ -59,7 +59,7 @@ st.markdown("""
 .hero{background:white;border:1px solid #dfe7f1;border-radius:18px;padding:18px 24px;box-shadow:0 4px 16px rgba(15,35,70,.06);display:grid;grid-template-columns:minmax(260px,1fr) auto;align-items:center;gap:24px;margin-bottom:18px}
 .hero-left{display:flex;flex-direction:column;gap:8px}.hero h1{margin:0;color:#082b59;font-size:clamp(24px,3vw,38px);font-weight:900}.hero p{margin:0;color:#526174}.logo{width:min(520px,100%);height:auto;display:block}.update{background:#eaf8ee;color:#177a38;border:1px solid #c5ead0;border-radius:12px;padding:11px 14px;font-weight:700;white-space:nowrap}
 .public-badge{display:inline-block;background:#e8f8ed;color:#16833a;border:1px solid #bde7ca;padding:7px 11px;border-radius:8px;font-weight:800;margin-bottom:12px}
-.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:8px 0 18px}
+.metric-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin:8px 0 18px}
 .metric{background:#fff;border:1px solid #dfe7f1;border-radius:16px;padding:17px 18px;box-shadow:0 3px 12px rgba(15,35,70,.04)}
 .metric .label{font-size:12px;font-weight:900;margin-bottom:8px}.metric .value{color:#0a2447;font-size:29px;font-weight:900}.metric .sub{color:#64748b;font-size:13px}.blue{color:#075bd8}.green{color:#0a8f34}.orange{color:#f05b08}.purple{color:#7132b9}
 .section{background:#fff;border:1px solid #dfe7f1;border-radius:16px;padding:16px 18px;margin-bottom:16px;box-shadow:0 3px 12px rgba(15,35,70,.04)}
@@ -67,7 +67,7 @@ st.markdown("""
 .results-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:12px 0 10px;color:#334155;font-weight:700}
 .product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .product-card{background:#fff;border:1px solid #dfe7f1;border-radius:16px;padding:16px 18px;box-shadow:0 3px 12px rgba(15,35,70,.05);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;min-height:165px}
-.badge{display:inline-block;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:900;margin-bottom:9px}.badge-nota{background:#e8f5ff;color:#0754a5}.badge-diesel{background:#e9f8ee;color:#0a8f34}
+.badge{display:inline-block;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:900;margin-bottom:9px}.badge-nota{background:#e8f5ff;color:#0754a5}.badge-semnota{background:#fff4d8;color:#9a5b00}.badge-diesel{background:#e9f8ee;color:#0a8f34}
 .desc{color:#0a2447;font-size:18px;line-height:1.25;font-weight:900;margin-bottom:10px}.meta{color:#64748b;font-size:13px;line-height:1.55}.stock-box{min-width:140px;text-align:right;align-self:center}.qty{color:#0a9939;font-size:18px;font-weight:900;margin-bottom:8px}.price{color:#064ca5;font-size:24px;font-weight:900}.price-label{color:#64748b;font-size:11px;font-weight:700}.footer-note{background:#eaf3ff;border:1px solid #d6e6fa;border-radius:12px;padding:12px 14px;color:#24476d;margin-top:16px;font-size:13px}
 
 div[data-testid="stTextInput"] input, div[data-testid="stSelectbox"]>div>div{background:white}
@@ -209,6 +209,7 @@ st.markdown(f"""
 
 total = int(df["quantidade"].sum()) if not df.empty else 0
 nota = int(df.loc[df["origem"]=="PNEUS COM NOTA","quantidade"].sum()) if not df.empty else 0
+sem_nota = int(df.loc[df["origem"]=="PNEUS SEM NOTA","quantidade"].sum()) if not df.empty else 0
 diesel = int(df.loc[df["origem"]=="DIESEL PNEUS","quantidade"].sum()) if not df.empty else 0
 modelos = len(df)
 
@@ -216,6 +217,7 @@ st.markdown(f"""
 <div class="metric-grid">
   <div class="metric"><div class="label blue">TOTAL DE PNEUS</div><div class="value">{total:,}</div><div class="sub">unidades</div></div>
   <div class="metric"><div class="label green">PNEUS COM NOTA</div><div class="value">{nota:,}</div><div class="sub">unidades</div></div>
+  <div class="metric"><div class="label" style="color:#9a5b00">PNEUS SEM NOTA</div><div class="value">{sem_nota:,}</div><div class="sub">unidades</div></div>
   <div class="metric"><div class="label orange">DIESEL PNEUS</div><div class="value">{diesel:,}</div><div class="sub">unidades</div></div>
   <div class="metric"><div class="label purple">TOTAL DE MODELOS</div><div class="value">{modelos}</div><div class="sub">modelos</div></div>
 </div>
@@ -226,7 +228,7 @@ busca = st.text_input("Pesquisar por medida, modelo ou descrição", placeholder
 
 c1,c2,c3 = st.columns([1,1,1])
 with c1:
-    origem = st.selectbox("Origem", ["TODAS","PNEUS COM NOTA","DIESEL PNEUS"])
+    origem = st.selectbox("Origem", ["TODAS","PNEUS COM NOTA","PNEUS SEM NOTA","DIESEL PNEUS"])
 base = df if origem=="TODAS" else df[df["origem"]==origem]
 with c2:
     marca = st.selectbox("Marca", ["TODAS"] + sorted(base["marca"].dropna().unique().tolist()))
@@ -249,7 +251,12 @@ st.markdown(f'<div class="results-head"><div>🛞 <b>{len(f)}</b> modelos encont
 cards=[]
 for row in f.itertuples():
     origem_txt = str(row.origem)
-    badge_class = "badge-diesel" if origem_txt == "DIESEL PNEUS" else "badge-nota"
+    if origem_txt == "DIESEL PNEUS":
+        badge_class = "badge-diesel"
+    elif origem_txt == "PNEUS SEM NOTA":
+        badge_class = "badge-semnota"
+    else:
+        badge_class = "badge-nota"
     qtd = int(row.quantidade)
     un = "unidade" if qtd == 1 else "unidades"
     desc = str(row.descricao).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
