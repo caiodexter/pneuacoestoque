@@ -565,10 +565,178 @@ footer,
     }
 }
 
+
+/* ===== MOBILE V3: CONTRASTE + CARRINHO FLUTUANTE ===== */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {
+    color:#0a2447 !important;
+}
+
+div[data-testid="stMarkdownContainer"] h1,
+div[data-testid="stMarkdownContainer"] h2,
+div[data-testid="stMarkdownContainer"] h3,
+div[data-testid="stMarkdownContainer"] h4,
+div[data-testid="stMarkdownContainer"] p,
+div[data-testid="stMarkdownContainer"] li,
+div[data-testid="stMetric"] *,
+label, .stCaption {
+    color:#0a2447 !important;
+    -webkit-text-fill-color:#0a2447 !important;
+    opacity:1 !important;
+}
+
+/* Inputs: texto sempre escuro e fundo branco, inclusive iPhone/iOS */
+div[data-testid="stNumberInput"] input,
+div[data-testid="stTextInput"] input,
+div[data-testid="stTextArea"] textarea {
+    background:#ffffff !important;
+    color:#0a2447 !important;
+    -webkit-text-fill-color:#0a2447 !important;
+    caret-color:#0a2447 !important;
+    opacity:1 !important;
+}
+
+div[data-testid="stNumberInput"] [data-baseweb="input"],
+div[data-testid="stTextInput"] [data-baseweb="input"],
+div[data-testid="stTextArea"] [data-baseweb="textarea"] {
+    background:#ffffff !important;
+    color:#0a2447 !important;
+}
+
+/* Controles + e - dos campos numéricos */
+div[data-testid="stNumberInput"] button {
+    background:#eef4fb !important;
+    color:#0a2447 !important;
+    border-color:#cbd8e8 !important;
+}
+div[data-testid="stNumberInput"] button * {
+    color:#0a2447 !important;
+    fill:#0a2447 !important;
+}
+
+/* Alertas legíveis */
+div[data-testid="stAlert"] {
+    color:#0a2447 !important;
+}
+div[data-testid="stAlert"] * {
+    opacity:1 !important;
+}
+
+/* Carrinho flutuante */
+.st-key-floating_cart {
+    position:fixed !important;
+    right:22px !important;
+    bottom:22px !important;
+    width:min(390px, calc(100vw - 32px)) !important;
+    z-index:999999 !important;
+    background:rgba(255,255,255,.97) !important;
+    border:1px solid #cbd8e8 !important;
+    border-radius:18px !important;
+    padding:10px !important;
+    box-shadow:0 12px 35px rgba(5,34,73,.25) !important;
+    backdrop-filter:blur(8px);
+}
+.st-key-floating_cart button {
+    width:100% !important;
+    min-height:52px !important;
+    background:linear-gradient(100deg,#062b59,#0b5fc1) !important;
+    border:0 !important;
+    border-radius:13px !important;
+    color:#ffffff !important;
+    font-weight:900 !important;
+    font-size:16px !important;
+}
+.st-key-floating_cart button * {
+    color:#ffffff !important;
+    -webkit-text-fill-color:#ffffff !important;
+}
+
+/* Dialog/carrinho */
+div[role="dialog"] {
+    background:#f5f8fc !important;
+}
+div[role="dialog"] h1,
+div[role="dialog"] h2,
+div[role="dialog"] h3,
+div[role="dialog"] p,
+div[role="dialog"] label {
+    color:#0a2447 !important;
+    -webkit-text-fill-color:#0a2447 !important;
+}
+div[role="dialog"] input,
+div[role="dialog"] textarea {
+    background:#ffffff !important;
+    color:#0a2447 !important;
+    -webkit-text-fill-color:#0a2447 !important;
+}
+
+@media (max-width:700px){
+    .block-container{
+        padding-left:.65rem !important;
+        padding-right:.65rem !important;
+        padding-bottom:7.5rem !important;
+    }
+    .st-key-floating_cart{
+        left:12px !important;
+        right:12px !important;
+        bottom:calc(14px + env(safe-area-inset-bottom)) !important;
+        width:auto !important;
+        border-radius:16px !important;
+    }
+    .st-key-floating_cart button{
+        min-height:56px !important;
+        font-size:16px !important;
+    }
+    div[data-testid="stNumberInput"] input,
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stTextArea"] textarea{
+        font-size:16px !important;
+        min-height:48px !important;
+    }
+}
+
+
+.quote-search-card{
+    background:linear-gradient(100deg,#ffffff,#f3f8ff);
+    border:1px solid #d7e4f3;
+    border-radius:16px;
+    padding:13px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    box-shadow:0 4px 14px rgba(10,36,71,.06);
+    margin:4px 0 8px;
+}
+.quote-search-icon{
+    width:42px;height:42px;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;
+    background:#eaf3ff;font-size:22px;
+}
+.quote-search-title{
+    color:#082b59;
+    font-size:18px;
+    font-weight:900;
+    line-height:1.1;
+}
+.quote-search-sub{
+    color:#64748b;
+    font-size:12px;
+    margin-top:4px;
+}
+@media(max-width:700px){
+    .quote-search-card{padding:11px 12px;border-radius:14px}
+    .quote-search-icon{width:38px;height:38px;font-size:20px}
+    .quote-search-title{font-size:16px}
+    .quote-search-sub{font-size:11px}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 df = load_stock()
+
+
 
 st.markdown('<div class="public-badge">🌐 ACESSO PÚBLICO — NÃO É NECESSÁRIO LOGIN</div>', unsafe_allow_html=True)
 
@@ -584,6 +752,115 @@ st.markdown(f"""
   <div class="update">↻ Última atualização: {agora}</div>
 </div>
 """, unsafe_allow_html=True)
+
+# ===== CONSULTA RÁPIDA DE ORÇAMENTOS =====
+st.markdown("""
+<div class="quote-search-card">
+  <div class="quote-search-icon">📋</div>
+  <div>
+    <div class="quote-search-title">Consultar orçamento</div>
+    <div class="quote-search-sub">Veja rapidamente se a proposta está aprovada, pendente ou recusada.</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+with st.expander("🔎 Abrir consulta de orçamentos", expanded=False):
+    tipo_busca = st.radio(
+        "Buscar por",
+        ["Vendedor", "Número do orçamento"],
+        horizontal=True,
+        key="tipo_busca_orcamento_topo",
+    )
+
+    if tipo_busca == "Vendedor":
+        termo_orc = st.text_input(
+            "Nome do vendedor",
+            placeholder="Ex.: clecio",
+            key="consulta_vendedor_topo",
+        ).strip()
+
+        if termo_orc:
+            meus = pd.read_sql_query(text("""
+                SELECT numero, criado_em, cliente_nome, desconto_percentual, total, status,
+                       aprovado_por, aprovado_em, motivo_aprovacao, vendedor
+                FROM orcamentos
+                WHERE LOWER(TRIM(vendedor)) = LOWER(TRIM(:termo))
+                ORDER BY numero DESC
+                LIMIT 100
+            """), engine, params={"termo": termo_orc})
+        else:
+            meus = pd.DataFrame()
+
+    else:
+        termo_num = st.text_input(
+            "Número do orçamento",
+            placeholder="Ex.: 7803",
+            key="consulta_numero_topo",
+        ).strip()
+
+        if termo_num.isdigit():
+            meus = pd.read_sql_query(text("""
+                SELECT numero, criado_em, cliente_nome, desconto_percentual, total, status,
+                       aprovado_por, aprovado_em, motivo_aprovacao, vendedor
+                FROM orcamentos
+                WHERE numero = :numero
+                ORDER BY numero DESC
+            """), engine, params={"numero": int(termo_num)})
+        elif termo_num:
+            st.warning("Digite apenas o número do orçamento.")
+            meus = pd.DataFrame()
+        else:
+            meus = pd.DataFrame()
+
+    if not meus.empty:
+        for o in meus.itertuples():
+            status = str(o.status or "").upper()
+            if status == "APROVADO":
+                icone = "🟢"
+                status_label = "APROVADO"
+            elif status == "RECUSADO":
+                icone = "🔴"
+                status_label = "RECUSADO"
+            else:
+                icone = "🟠"
+                status_label = "AGUARDANDO APROVAÇÃO"
+
+            with st.expander(
+                f"{icone} Nº {int(o.numero)} • {o.cliente_nome} • {brl(o.total)} • {status_label}"
+            ):
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Vendedor", str(o.vendedor))
+                c2.metric("Total", brl(o.total))
+                c3.metric("Status", status_label)
+
+                if status == "RECUSADO" and o.motivo_aprovacao:
+                    st.error(f"Motivo da recusa: {o.motivo_aprovacao}")
+
+                if status == "APROVADO":
+                    cab, itens_pdf = carregar_orcamento(int(o.numero))
+                    if cab:
+                        st.success(
+                            f"✅ Aprovado"
+                            + (f" por {cab.get('aprovado_por')}" if cab.get("aprovado_por") else "")
+                        )
+                        pdf = gerar_pdf_orcamento(cab, itens_pdf, logo64)
+                        st.download_button(
+                            "📄 Baixar PDF",
+                            data=pdf,
+                            file_name=f"orcamento_pneuaco_{int(o.numero)}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_top_{int(o.numero)}",
+                            use_container_width=True,
+                        )
+                else:
+                    st.info("O PDF definitivo será liberado quando o orçamento for aprovado.")
+
+    elif (
+        (tipo_busca == "Vendedor" and termo_orc)
+        or (tipo_busca == "Número do orçamento" and 'termo_num' in locals() and termo_num)
+    ):
+        st.info("Nenhum orçamento encontrado.")
+
 
 total = int(df["quantidade"].sum()) if not df.empty else 0
 nota = int(df.loc[df["origem"]=="PNEUS COM NOTA","quantidade"].sum()) if not df.empty else 0
@@ -626,7 +903,8 @@ f = f.sort_values(["marca","descricao"])
 
 st.markdown(f'<div class="results-head"><div>🛞 <b>{len(f)}</b> modelos encontrados</div><div>{"Somente itens disponíveis" if not mostrar_zero else "Incluindo itens sem estoque"}</div></div>', unsafe_allow_html=True)
 
-st.markdown("### 🧾 Montar orçamento")
+st.markdown("### 🛞 Selecione os pneus")
+st.caption("Toque em **Adicionar ao orçamento**. O carrinho ficará visível na parte inferior da tela.")
 rows = list(f.itertuples())
 for pos in range(0, len(rows), 2):
     cols = st.columns(2)
@@ -642,117 +920,152 @@ for pos in range(0, len(rows), 2):
                     st.session_state.orcamento_carrinho[k]={"produto_id":int(row.produto_id),"descricao":str(row.descricao),"marca":str(row.marca),"quantidade":1,"estoque":qtd,"valor_unitario":float(row.preco_unitario or 0)}
                 st.rerun()
 
-st.markdown("---")
-carrinho=st.session_state.orcamento_carrinho
-st.subheader(f"🛒 Orçamento atual ({len(carrinho)} modelos)")
-if not carrinho:
-    st.info("Adicione pneus usando os botões acima.")
-else:
-    remover=[]
-    for k,item in list(carrinho.items()):
-        a,b,c,d=st.columns([5,1.2,1.8,.8])
-        a.markdown(f"**{item['descricao']}**  \\n{item['marca']}")
-        item["quantidade"]=b.number_input("Qtd.",1,max(1,int(item["estoque"])),int(item["quantidade"]),key=f"q_{k}")
-        item["valor_unitario"]=c.number_input("Valor unit.",min_value=0.0,value=float(item["valor_unitario"]),step=10.0,format="%.2f",key=f"v_{k}")
-        if d.button("🗑️",key=f"r_{k}"): remover.append(k)
-    for k in remover:
-        carrinho.pop(k,None); st.rerun()
 
-    subtotal=sum(i["quantidade"]*i["valor_unitario"] for i in carrinho.values())
-    with st.form("orcamento"):
-        st.markdown("### Dados do cliente")
-        c1,c2=st.columns(2)
-        with c1:
-            vendedor=st.text_input("Vendedor *")
-            cliente=st.text_input("Cliente / Razão Social *")
-            cnpj=st.text_input("CNPJ / CPF")
-            telefone=st.text_input("Telefone")
-        with c2:
-            email=st.text_input("E-mail")
-            endereco=st.text_input("Endereço")
-            desconto=st.number_input("Desconto (%)",0.0,5.0,0.0,.5,format="%.2f")
-            obs=st.text_area("Observações")
-        total=subtotal*(1-desconto/100)
-        if desconto<=3: st.success("✅ Até 3%: aprovação automática.")
-        else: st.warning("🟠 Acima de 3% até 5%: cai para aprovação do ADMINISTRADOR.")
-        m1,m2,m3=st.columns(3)
-        m1.metric("Subtotal",brl(subtotal)); m2.metric("Desconto",brl(subtotal-total)); m3.metric("Total",brl(total))
-        if st.form_submit_button("💾 Salvar orçamento",use_container_width=True):
+carrinho = st.session_state.orcamento_carrinho
+
+def _conteudo_carrinho():
+    carrinho = st.session_state.orcamento_carrinho
+    st.markdown(f"### 🛒 Orçamento atual — {len(carrinho)} modelo(s)")
+
+    if not carrinho:
+        st.info("Seu carrinho está vazio. Feche esta janela e adicione pneus ao orçamento.")
+        return
+
+    remover = []
+    for k, item in list(carrinho.items()):
+        st.markdown(
+            f"**{item['descricao']}**  \n"
+            f"Marca: {item['marca']} • Estoque disponível: {int(item['estoque'])}"
+        )
+        q1, q2, q3 = st.columns([1.15, 1.55, .55])
+        with q1:
+            item["quantidade"] = st.number_input(
+                "Quantidade",
+                min_value=1,
+                max_value=max(1, int(item["estoque"])),
+                value=int(item["quantidade"]),
+                step=1,
+                key=f"qdlg_{k}",
+            )
+        with q2:
+            item["valor_unitario"] = st.number_input(
+                "Valor unitário",
+                min_value=0.0,
+                value=float(item["valor_unitario"]),
+                step=10.0,
+                format="%.2f",
+                key=f"vdlg_{k}",
+            )
+        with q3:
+            st.write("")
+            st.write("")
+            if st.button("🗑️", key=f"rdlg_{k}", help="Remover item"):
+                remover.append(k)
+        st.caption(f"Total do item: {brl(item['quantidade'] * item['valor_unitario'])}")
+        st.divider()
+
+    for k in remover:
+        carrinho.pop(k, None)
+        st.rerun()
+
+    subtotal = sum(i["quantidade"] * i["valor_unitario"] for i in carrinho.values())
+    st.markdown(f"### Subtotal: {brl(subtotal)}")
+
+    with st.form("orcamento_dialog"):
+        st.markdown("### 👤 Dados do cliente")
+
+        vendedor = st.text_input("Vendedor *", key="dlg_vendedor")
+        cliente = st.text_input("Cliente / Razão Social *", key="dlg_cliente")
+        cnpj = st.text_input("CNPJ / CPF", key="dlg_cnpj")
+        telefone = st.text_input("Telefone", key="dlg_telefone")
+        email = st.text_input("E-mail", key="dlg_email")
+        endereco = st.text_input("Endereço", key="dlg_endereco")
+        desconto = st.number_input(
+            "Desconto (%)",
+            min_value=0.0,
+            max_value=5.0,
+            value=0.0,
+            step=0.5,
+            format="%.2f",
+            key="dlg_desconto",
+        )
+        obs = st.text_area("Observações", key="dlg_obs")
+
+        total = subtotal * (1 - desconto / 100)
+        if desconto <= 3:
+            st.success("✅ Até 3%: aprovação automática.")
+        else:
+            st.warning("🟠 Acima de 3% até 5%: enviado para aprovação.")
+
+        t1, t2 = st.columns(2)
+        t1.metric("Subtotal", brl(subtotal))
+        t2.metric("Total final", brl(total))
+
+        salvar = st.form_submit_button(
+            "💾 Finalizar e salvar orçamento",
+            use_container_width=True,
+            type="primary",
+        )
+        if salvar:
             if not vendedor.strip() or not cliente.strip():
-                st.error("Informe vendedor e cliente.")
+                st.error("Informe o vendedor e o cliente.")
             else:
                 try:
-                    numero,status,total_salvo=salvar_orcamento(vendedor.strip(),cliente.strip(),cnpj.strip(),telefone.strip(),email.strip(),endereco.strip(),obs.strip(),desconto)
-                    st.session_state.orcamento_carrinho={}
-                    if status=="APROVADO": st.success(f"✅ Orçamento Nº {numero} salvo e aprovado automaticamente — {brl(total_salvo)}")
-                    else: st.warning(f"🟠 Orçamento Nº {numero} enviado para aprovação do ADMINISTRADOR — {brl(total_salvo)}")
+                    numero, status, total_salvo = salvar_orcamento(
+                        vendedor.strip(), cliente.strip(), cnpj.strip(),
+                        telefone.strip(), email.strip(), endereco.strip(),
+                        obs.strip(), desconto
+                    )
+                    st.session_state.orcamento_carrinho = {}
+                    if status == "APROVADO":
+                        st.success(
+                            f"✅ Orçamento Nº {numero} salvo e aprovado automaticamente — {brl(total_salvo)}"
+                        )
+                    else:
+                        st.warning(
+                            f"🟠 Orçamento Nº {numero} enviado para aprovação — {brl(total_salvo)}"
+                        )
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao salvar orçamento: {e}")
 
-st.markdown(f'<div class="footer-note">ⓘ Estoque atualizado automaticamente a cada 60 segundos. Última consulta: <b>{agora}</b>.</div>', unsafe_allow_html=True)
+# Streamlit moderno: abre o carrinho como janela/modal.
+if hasattr(st, "dialog"):
+    _abrir_dialog = st.dialog("🛒 Finalizar orçamento", width="large")(_conteudo_carrinho)
+else:
+    _abrir_dialog = None
 
+with st.container(key="floating_cart"):
+    qtd_modelos = len(carrinho)
+    qtd_unidades = sum(int(i["quantidade"]) for i in carrinho.values()) if carrinho else 0
+    subtotal_flutuante = sum(
+        i["quantidade"] * i["valor_unitario"] for i in carrinho.values()
+    ) if carrinho else 0
 
-st.markdown("---")
-st.header("📋 Meus Orçamentos")
-st.caption("Consulte o status das propostas. Quando estiver APROVADO, o PDF definitivo fica liberado.")
-
-vendedor_consulta = st.text_input(
-    "Nome do vendedor",
-    key="consulta_vendedor_orcamentos",
-    placeholder="Digite exatamente o nome usado ao criar o orçamento"
-).strip()
-
-if vendedor_consulta:
-    meus = pd.read_sql_query(text("""
-        SELECT numero, criado_em, cliente_nome, desconto_percentual, total, status,
-               aprovado_por, aprovado_em, motivo_aprovacao
-        FROM orcamentos
-        WHERE LOWER(TRIM(vendedor)) = LOWER(TRIM(:vendedor))
-        ORDER BY numero DESC
-        LIMIT 100
-    """), engine, params={"vendedor": vendedor_consulta})
-
-    if meus.empty:
-        st.info("Nenhum orçamento encontrado para esse vendedor.")
+    if carrinho:
+        texto_botao = (
+            f"🛒 Carrinho: {qtd_modelos} modelo(s) • {qtd_unidades} un. • "
+            f"{brl(subtotal_flutuante)}  |  FINALIZAR"
+        )
     else:
-        for o in meus.itertuples():
-            status = str(o.status or "").upper()
-            if status == "APROVADO":
-                icone = "🟢"
-            elif status == "RECUSADO":
-                icone = "🔴"
-            else:
-                icone = "🟠"
+        texto_botao = "🛒 Carrinho vazio"
 
-            with st.expander(
-                f"{icone} Orçamento Nº {int(o.numero)} — {o.cliente_nome} — {brl(o.total)} — {status}"
-            ):
-                c1,c2,c3 = st.columns(3)
-                c1.metric("Desconto", f"{float(o.desconto_percentual or 0):.2f}%")
-                c2.metric("Total", brl(o.total))
-                c3.metric("Status", status)
+    if st.button(
+        texto_botao,
+        key="abrir_carrinho_flutuante",
+        use_container_width=True,
+        disabled=not bool(carrinho),
+    ):
+        if _abrir_dialog is not None:
+            _abrir_dialog()
+        else:
+            st.session_state["mostrar_carrinho_fallback"] = True
 
-                if status == "RECUSADO" and o.motivo_aprovacao:
-                    st.error(f"Motivo da recusa: {o.motivo_aprovacao}")
+# Fallback para instalações antigas do Streamlit.
+if st.session_state.get("mostrar_carrinho_fallback") and _abrir_dialog is None:
+    with st.expander("🛒 Finalizar orçamento", expanded=True):
+        _conteudo_carrinho()
 
-                if status == "APROVADO":
-                    cab, itens_pdf = carregar_orcamento(int(o.numero))
-                    if cab:
-                        st.success(
-                            f"✅ APROVADO"
-                            + (f" por {cab.get('aprovado_por')}" if cab.get("aprovado_por") else "")
-                        )
-                        pdf = gerar_pdf_orcamento(cab, itens_pdf, logo64)
-                        st.download_button(
-                            "📄 Baixar PDF do orçamento",
-                            data=pdf,
-                            file_name=f"orcamento_pneuaco_{int(o.numero)}.pdf",
-                            mime="application/pdf",
-                            key=f"pdf_{int(o.numero)}",
-                            use_container_width=True
-                        )
-                        st.caption("Após baixar, abra o PDF para imprimir ou compartilhar pelo WhatsApp/e-mail.")
-                else:
-                    st.warning("O PDF definitivo será liberado somente após a aprovação.")
+st.markdown(f'<div class="footer-note">ⓘ Estoque atualizado automaticamente a cada 60 segundos. Última consulta: <b>{agora}</b>.</div>', unsafe_allow_html=True)
 
 
