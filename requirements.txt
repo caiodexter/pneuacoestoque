@@ -6,3 +6,4 @@ SQLAlchemy>=2.0
 psycopg[binary]>=3.2
 reportlab>=4.2
 streamlit-autorefresh>=1.0.1
+ddgs>=9.16.0,<10
